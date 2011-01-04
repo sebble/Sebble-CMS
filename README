@@ -1,0 +1,6 @@
+   = Sebble CMS
+  == Content Management for easily building usable apps
+
+Initially this project started in 2006 when I needed a simple templating system to allow me to make web-pages without rewriting the head, foot, sidebar etc. but also without any database or many modules. This lead to the creation of many tools such as PHPrewrite, TreeDB, CSVSQL. Although Sebble CMS now uses a database and prefers mod_rewrite, the origins of simplicity and ease to manage have stayed strong.
+
+It should be noted that although I make use of my own wiki-style parser and several 'extensions', in this version I have used the Smarty templating engine.
