@@ -43,6 +43,8 @@ class CMS5{
     var $cms = array();
     var $page = array();
     var $smarty;
+    var $response;
+    var $loop;
     
     function CMS5(){
         // load default config file
@@ -51,6 +53,8 @@ class CMS5{
         // start authentication?
         // load user file? or db?
         $this->Log("initiated: version ".CMS_VERSION);
+        $this->response = 200;
+        $this->loop=0;
     }
     
     function ReadConfig($config_file,$db=false){
@@ -113,6 +117,7 @@ class CMS5{
     }
     
     function DoCMS($page=false,$action=false){
+        $this->loop++;
         // perform the main CMS stuff
         // sanitise request variables?
         // this may be completely unnecessary
@@ -132,6 +137,8 @@ class CMS5{
         // -- repeat from here if changing template (see Smarty404())
         $this->cms['this_page'] = $this->request['page'];
         //thispage not needed here, set it when successful page requested from DB..
+        // one more request
+        $this->request['uri'] = 'http://'.$_SERVER["SERVER_NAME"].$_SERVER["REQUEST_URI"];
         
         $this->LoadPage();
         $this->Breakpoint(BREAK_SMARTY);
@@ -177,7 +184,7 @@ class CMS5{
                         $this->request['regex']=$match;
                         // avoid 404 somehow..
                         if($page==$page404){ //unless is 404
-                            header("HTTP/1.0 404 Not Found");
+                            header("HTTP/1.0 404 Not Found");$this->response=404;
                         }
                         // store page data
                         // but first fix template
@@ -207,7 +214,7 @@ class CMS5{
             $this->Log("error404: {$page}");
             $error = mysql_error($this->cms['db_conn']);
             $this->Log("sql: {$error}");
-            header("HTTP/1.0 404 Not Found");
+            header("HTTP/1.0 404 Not Found");$this->response=404;
             if($page==$page404){
                 $this->Log("fatal: no 404 page");
                 $this->Breakpoint();
@@ -218,7 +225,7 @@ class CMS5{
             return;
         }
         if($page==$page404){
-            header("HTTP/1.0 404 Not Found");
+            header("HTTP/1.0 404 Not Found");$this->response=404;
         }
         // store page data
         // but first fix template
@@ -279,6 +286,7 @@ class CMS5{
         // configure smarty
         $this->smarty->template_dir = array($app_dir.'/templates',
                                         dirname(__FILE__).'/templates');
+        $this->smarty->caching = $this->config['system']['caching'];
         // !! tp_dir array is an undocumented 'feature'
         $this->smarty->compile_dir = $app_dir.'/templates/_compile';
         $this->smarty->cache_dir = $app_dir.'/templates/_cache'; // is it bad to mix these two?
@@ -311,6 +319,8 @@ class CMS5{
             $this->smarty->assign($k,$v);
         }
         
+        
+        
         // register the important bits of this
         $this->smarty->register_block('placeholder_block',array(&$this,'smarty_placeholder_block'));
         $this->smarty->register_function('placeholder',array(&$this,'smarty_placeholder'));
@@ -318,13 +328,16 @@ class CMS5{
         $this->smarty->register_function('header404',array(&$this,'smarty_header404'));
         $this->smarty->register_function('redirect',array(&$this,'smarty_redirect'));
         $this->smarty->register_function('reassign',array(&$this,'smarty_reassign'));
+        // string resource not needed in Smarty3
+        $this->smarty->register_resource('str',array(&$this,'smarty_str_template','smarty_str_timestamp','smarty_str_secure','smarty_str_trusted'));
     }
     
     function ShowPage(){
         // use the template and show the page
         
         ob_start();
-        $this->smarty->display($this->page['template'].'.tpl');
+        $this->smarty->cache_lifetime = 60;#echo $this->request['uri'];
+        $this->smarty->display($this->page['template'].'.tpl',$this->cms['this_page']);
         //if(defined('SMARTY404')&&($this->page!='404')){$this->loadPage('404');ob_end_clean();$this->initSmarty($smarty);return;}
         if(defined('CONTENT404')&&$this->cms['page']!=$this->config['system']['404page'])
         $this->Content404();
@@ -338,9 +351,11 @@ class CMS5{
                     $this->smarty->assign($key,$value);
                 }
                 ob_start();
-                $this->smarty->display($this->page['template'].'.tpl');
+                #$this->smarty->cache_lifetime = 3600;echo $this->request['uri']);
+                $this->smarty->display($this->page['template'].'.tpl',$this->cms['this_page']);
             }
         }
+        header_by_code($this->response);
         ob_end_flush();
         
         // clean-up, we should be all done
@@ -371,12 +386,14 @@ class CMS5{
           $this->cms['this_page'] != $this->config['system']['404page']){
             // need to clear buffers
             
-            //header("HTTP/1.0 404 Not Found");
+            //header("HTTP/1.0 404 Not Found");$this->response=404;
             //$this->cms['this_page'] = $this->config['system']['404page'];
             // Reset CMS things
             // Break out of all buffers
-            ob_end_clean();
+            ob_end_clean_all();
+            
             $this->DoCMS($this->config['system']['404page']);
+            exit;
         }
     }
     
@@ -429,6 +446,7 @@ class CMS5{
             }
             
             // build section using data etc..
+            #$smarty->caching=0; # this stops bad things
             $output.=$smarty->fetch("sections/{$s['type']}.{$s['section']}.tpl");
         }
         // Thoughts..
@@ -453,12 +471,12 @@ class CMS5{
     
     function smarty_content404($params, &$smarty){
         
-        safe_define('CONTENT404', TRUE); // ext.lib
+        safe_define('CONTENT404', TRUE);$this->response=404; // ext.lib
     }
     
     function smarty_header404($params, &$smarty){
         
-        header("HTTP/1.0 404 Not Found");
+        header("HTTP/1.0 404 Not Found");$this->response=404;
     }
     
     function smarty_redirect($params, &$smarty){
@@ -484,6 +502,11 @@ class CMS5{
         }
         $smarty->assign($params['name'],$params['value']);
     }
+    
+    function smarty_str_template($tpl_name, &$tpl_source, &$smarty){$tpl_source=$tpl_name;return true;}
+    function smarty_str_timestamp($tpl_name, &$tpl_timestamp, &$smarty){$tpl_timestamp=time();return true;}
+    function smarty_str_secure($tpl_name, &$smarty){return true;}
+    function smarty_str_trusted($tpl_name, &$smarty){}
     
 }
 
