@@ -236,7 +236,7 @@ class cmsDataObject {
                     if(is_int($v)||is_float($v)){ $q=''; }
                     else{
                         $q='\'';
-                        if($this->_UTF8){ $v=iconv_UTF8($v); }
+                        if($this->_UTF8){ /*$v=iconv_UTF8($v); -- BUG: Not supported */ }
                     }
                     $values[]="$q$v$q";
                 }
@@ -250,7 +250,7 @@ class cmsDataObject {
                     if(is_int($v)||is_float($v)){ $q=''; }
                     else{
                         $q='\'';
-                        if($this->_UTF8){ $v=iconv_UTF8($v); }
+                        if($this->_UTF8){ /*$v=iconv_UTF8($v); -- BUG: not supported */ }
                     }
                     $values[]="`$k`=$q$v$q";
                 }
@@ -316,7 +316,8 @@ class cmsDataObject {
                 while($r=mysql_fetch_array($q,$this->_Link)){
                     if($this->_UTF8){
                         foreach($r as $k=>$f){
-                            $r[$k] = iconv_UTF8($f);
+                            #$r[$k] = iconv_UTF8($f); -- BUG: not included in all servers
+                            $r[$k] = $f;
                         }
                     }
                     $result[]=$r;
